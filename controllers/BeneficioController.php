@@ -17,6 +17,7 @@ use yii\web\BadRequestHttpException;
 use yii\web\Controller;
 use yii\filters\VerbFilter;
 use yii\filters\auth\HttpBearerAuth;
+use yii\web\NotFoundHttpException;
 use yii\web\ServerErrorHttpException;
 
 class BeneficioController extends Controller
@@ -607,7 +608,7 @@ class BeneficioController extends Controller
     }
     return $r;
   }
-
+  /* 
   private function createCodigoPregenerado($codes, $id_beneficio)
   {
     if ($codes !== '') {
@@ -626,7 +627,7 @@ class BeneficioController extends Controller
         $model->save();
       }
     }
-  }
+  } */
 
   /**
    * Accion que actualiza la informacion de una oferta, recibe una JSON body
@@ -638,7 +639,7 @@ class BeneficioController extends Controller
    * @author Cristhian Mercado
    * @method actionCreate
    */
-  public function actionUpdate($id)
+  /*   public function actionUpdate($id)
   {
     $params = Yii::$app->request->getBodyParams();
     if (isset($params['tipo_descuento'])) {
@@ -674,7 +675,56 @@ class BeneficioController extends Controller
     } else {
       throw new ServerErrorHttpException("No existe la oferta");
     }
+  } */
+  public function actionUpdate($id)
+  {
+    $params = Yii::$app->request->getBodyParams();
+
+    if (isset($params['tipo_descuento'])) {
+      $td = $params['tipo_descuento'];
+      switch ($td) {
+        case 'Porcentual':
+          $params['dto_porcentaje'] = $params['descuento'];
+          break;
+        case 'Monetario':
+          $params['dto_monetario'] = $params['descuento'];
+          break;
+        case 'Descripcion':
+          $params['dto_descripcion'] = $params['descuento'];
+          break;
+      }
+    }
+    unset($params['descuento']);
+    unset($params['codes']);
+
+    if (isset($params['fecha_fin']) && $params['fecha_fin'] <= date('Y-m-d H:i:s')) {
+      $params['status'] = 'EXPIRADO';
+    } else {
+      $params['status'] = 'VIGENTE';
+    }
+
+    $params['updated_at'] = date('Y-m-d H:i:s');
+
+    $transaction = Yii::$app->db->beginTransaction();
+
+    try {
+      $updatedRows = Beneficio::updateAll(
+        $params,
+        ['id_beneficio' => $id]
+      );
+
+      if ($updatedRows > 0) {
+        $transaction->commit();
+        return ['status' => true, 'msg' => 'Oferta actualizada exitosamente!'];
+      } else {
+        throw new ServerErrorHttpException('Algo salió mal al actualizar la oferta');
+      }
+    } catch (\Exception $e) {
+      $transaction->rollBack();
+      throw $e;
+    }
   }
+
 
   /**
    * Accion que elimina de forma logica una oferta
@@ -685,7 +735,7 @@ class BeneficioController extends Controller
    * @author Cristhian Mercado
    * @method actionCreate
    */
-  public function actionDelete($id)
+  /*   public function actionDelete($id)
   {
     $removed["removed"] = date("Y-m-d H:i:s");
     if ($beneficio = Beneficio::findOne($id)) {
@@ -697,7 +747,22 @@ class BeneficioController extends Controller
     } else {
       throw new ServerErrorHttpException("No existe la oferta");
     }
+  } */
+
+  public function actionDelete($id)
+  {
+    $removedTimestamp = date("Y-m-d H:i:s");
+
+    // Actualiza la oferta utilizando updateAll
+    $numUpdated = Beneficio::updateAll(['removed' => $removedTimestamp], ['id_beneficio' => $id]);
+
+    if ($numUpdated > 0) {
+      return ["status" => true, "msg" => "Oferta eliminada exitosamente!"];
+    } else {
+      throw new ServerErrorHttpException("Algo salió mal al eliminar la oferta");
+    }
   }
+
 
   /**
    * Funcion que obtiene los 10 beneficios mas recientes
@@ -716,15 +781,23 @@ class BeneficioController extends Controller
 
   public function actionSold($id)
   {
-    $params['status'] = "AGOTADO";
-    if ($beneficio = Beneficio::findOne($id)) {
-      if ($beneficio->load($params, '') && $beneficio->save()) {
-        return ["status" => true, "msg" => "Oferta actualizado exitosamente!"];
-      } else {
-        throw new ServerErrorHttpException("Algo salio mal al actualizar la oferta");
-      }
+    // Encuentra el beneficio por su ID
+    $beneficio = Beneficio::findOne($id);
+
+    // Lanza una excepción si el beneficio no se encuentra
+    if (!$beneficio) {
+      throw new NotFoundHttpException("No existe la oferta");
+    }
+    if ($beneficio->status == 'AGOTADO') {
+      $updatedRows = Beneficio::updateAll(['status' => 'VIGENTE'], ['id_beneficio' => $id]);
     } else {
-      throw new ServerErrorHttpException("No existe la oferta");
+      $updatedRows = Beneficio::updateAll(['status' => 'AGOTADO'], ['id_beneficio' => $id]);
+    }
+
+    if ($updatedRows > 0) {
+      return ["status" => true, "msg" => "Oferta actualizado exitosamente!"];
+    } else {
+      throw new ServerErrorHttpException("Algo salió mal al actualizar la oferta");
     }
   }
 }

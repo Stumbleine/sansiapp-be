@@ -293,12 +293,12 @@ class CodigoController extends \yii\web\Controller
     $params['status'] = true;
     if ($code->load($params, '') && $code->save()) {
       $beneficio = Beneficio::findOne($code->id_beneficio);
-      if ($beneficio->stock > 0) {
-        $beneficio->stock = $beneficio->stock - 1;
-        if ($beneficio->save()) {
+      if ($beneficio && $beneficio->stock > 0) {
+        $updatedRows = $beneficio->updateCounters(['stock' => -1]);
+        if ($updatedRows > 0) {
           return true;
         } else {
-          throw new ServerErrorHttpException($beneficio->getErrors());
+          throw new ServerErrorHttpException('Error al actualizar el stock del beneficio.');
         }
       } else {
         return true;

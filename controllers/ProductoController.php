@@ -159,7 +159,7 @@ class ProductoController extends Controller
    * @author Cristhian Mercado
    * @method actionCreate
    */
-  public function actionCreate()
+  /*   public function actionCreate()
   {
     $params = Yii::$app->request->post();
     $roles = Yii::$app->authManager->getRolesByUser(Yii::$app->user->identity->id);
@@ -179,7 +179,35 @@ class ProductoController extends Controller
         "error" => $model->getErrors()
       ];
     }
+  } */
+
+  public function actionCreate()
+  {
+    $params = Yii::$app->request->post();
+    $roles = Yii::$app->authManager->getRolesByUser(Yii::$app->user->identity->id);
+
+    if (!isset($roles['ADM']) && !isset($roles['SADM'])) {
+      $empresa = Empresa::findOne(['id_proveedor' => Yii::$app->user->identity->id]);
+      $params["id_empresa"] = $empresa->id_empresa;
+    }
+
+    $params['created_at'] = date("Y-m-d H:i:s");
+
+    // Crea un nuevo modelo Producto con los parámetros recibidos
+    $model = new Producto($params);
+
+    if ($model->validate() && $model->save()) {
+      return ["status" => true, "msg" => "Producto creado exitosamente!"];
+    } else {
+      Yii::$app->response->statusCode = 400;
+      return [
+        "status" => false,
+        "msg" => "Algo salió mal al crear el producto",
+        "error" => $model->getErrors()
+      ];
+    }
   }
+
 
   /**
    * Accion que permite actualizar lo datos de un producto.
@@ -191,7 +219,7 @@ class ProductoController extends Controller
    * @author Cristhian Mercado
    * @method actionUpdate
    */
-  public function actionUpdate($id)
+  /*   public function actionUpdate($id)
   {
     $params = Yii::$app->request->getBodyParams();
     if ($producto = Producto::findOne($id)) {
@@ -209,7 +237,36 @@ class ProductoController extends Controller
       throw new ServerErrorHttpException("No existe el producto");
     }
     return $r;
+  } */
+  public function actionUpdate($id)
+  {
+    $params = Yii::$app->request->getBodyParams();
+
+    // Busca el producto por su ID
+    $producto = Producto::findOne($id);
+
+    if ($producto) {
+      // Asigna la fecha de actualización
+      $params['updated_at'] = date("Y-m-d H:i:s");
+
+      // Actualiza el producto utilizando updateAll
+      $numUpdated = Producto::updateAll($params, ['id_producto' => $id]);
+
+      if ($numUpdated > 0) {
+        return ["status" => true, "msg" => "Producto actualizado exitosamente!"];
+      } else {
+        Yii::$app->response->statusCode = 500;
+        return [
+          "status" => false,
+          "msg" => "Algo salió mal al actualizar el producto",
+          "error" => "No se actualizó ninguna fila"
+        ];
+      }
+    } else {
+      throw new ServerErrorHttpException("No existe el producto");
+    }
   }
+
 
   /**
    * Accion que permite eliminar un producto de forma logica
@@ -220,7 +277,7 @@ class ProductoController extends Controller
    * @author Cristhian Mercado
    * @method actionUpdate
    */
-  public function actionDelete($id)
+  /*   public function actionDelete($id)
   {
     $removed["removed"] = date("Y-m-d H:i:s");
     if ($product = Producto::findOne($id)) {
@@ -237,5 +294,23 @@ class ProductoController extends Controller
       throw new ServerErrorHttpException("No existe el producto");
     }
     return $r;
+  } */
+  public function actionDelete($id)
+  {
+    $removedTimestamp = date("Y-m-d H:i:s");
+
+    // Actualiza el producto utilizando updateAll
+    $numUpdated = Producto::updateAll(['removed' => $removedTimestamp], ['id_producto' => $id]);
+
+    if ($numUpdated > 0) {
+      return ["status" => true, "msg" => "Producto eliminado exitosamente!"];
+    } else {
+      Yii::$app->response->statusCode = 400;
+      return [
+        "status" => false,
+        "msg" => "Algo salió mal al eliminar el producto!",
+        "error" => "No se actualizó ninguna fila"
+      ];
+    }
   }
 }
