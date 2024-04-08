@@ -296,6 +296,9 @@ class CodigoController extends \yii\web\Controller
       if ($beneficio && $beneficio->stock > 0) {
         $updatedRows = $beneficio->updateCounters(['stock' => -1]);
         if ($updatedRows > 0) {
+          if ($beneficio->stock == 0) {
+            $this->updateBeneficioStatus($beneficio->id);
+          }
           return true;
         } else {
           throw new ServerErrorHttpException('Error al actualizar el stock del beneficio.');
@@ -307,6 +310,13 @@ class CodigoController extends \yii\web\Controller
       Yii::$app->response->statusCode = 400;
       return ["status" => false, "msg" => "Algo salio mal al canjear el codigo",];
     }
+  }
+
+  protected function updateBeneficioStatus($beneficioId)
+  {
+    Yii::$app->db->createCommand()
+      ->update('beneficio', ['status' => 'AGOTADO'], ['id' => $beneficioId])
+      ->execute();
   }
 
   /**
