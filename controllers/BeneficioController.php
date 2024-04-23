@@ -415,7 +415,7 @@ class BeneficioController extends Controller
    * @author Cristhian Mercado
    * @method getOffers
    */
-  protected function getOffers($search, $status, $idc)
+  protected function getOffers($search, $status, $idc, $rubro)
   {
     $searchWhere = [
       'or',
@@ -465,6 +465,52 @@ class BeneficioController extends Controller
     return $offers;
   }
 
+  protected function getOffers2($search, $status, $idc, $rubro)
+  {
+    $searchWhere = [
+      'or',
+      ['ilike', 'beneficio.titulo', $search],
+      ['ilike', 'beneficio.condiciones', $search],
+    ];
+    $statusWhere = $status !== 'All' ? ['status' => $status] : [];
+    $roles = Yii::$app->authManager->getRolesByUser(Yii::$app->user->identity->id);
+    $offers = null;
+    $query = Beneficio::find()->alias('b')->joinWith('empresa e'); // Ensure proper alias and relation names
+
+    // Apply basic conditions
+    $query->where(['b.removed' => null])->andWhere($statusWhere);
+
+    // Filter by IDC
+    if ($idc !== 'All') {
+      $query->andWhere(['b.id_empresa' => $idc]);
+    }
+
+    // Apply search condition
+    if ($search !== 'All') {
+      $query->andFilterWhere($searchWhere);
+    }
+
+    // Apply rubro condition if specified
+    if ($rubro !== 'All') {
+      $query->andWhere(['e.rubro' => $rubro]);
+    }
+
+    // Order and get results
+    $offers = $query->orderBy(['b.updated_at' => SORT_DESC])->all();
+
+    // For roles such as PRV, filter offers specific to the user's empresa
+    if (isset($roles['PRV'])) {
+      $empresa = Empresa::findOne(['id_proveedor' => Yii::$app->user->identity->id]);
+      if ($empresa) {
+        $query->andWhere(['b.id_empresa' => $empresa->id_empresa]);
+      } else {
+        return null; // No offers if no empresa found
+      }
+    }
+
+    return $offers;
+  }
+
   /**
    * Accion que lista ofertas segun los filtros aplicados (search,
    * status,idc) y ejecutados en la funcion getOffers()
@@ -477,10 +523,10 @@ class BeneficioController extends Controller
    * @author Cristhian Mercado
    * @method actionList
    */
-  public function actionList($search = 'All', $idc = 'All', $status = 'All')
+  public function actionList($search = 'All', $idc = 'All', $status = 'All', $rubro = 'All')
   {
     $response = null;
-    $offers = $this->getOffers($search, $status, $idc);
+    $offers = $this->getOffers($search, $status, $idc, $rubro);
     if ($offers != null) {
       foreach ($offers as $offer) {
         $descuento = UtilController::getDiscount($offer);
@@ -494,15 +540,12 @@ class BeneficioController extends Controller
               "id_branch" => $sucursal->id_sucursal,
               "name" => $sucursal->nombre,
               "address" => $sucursal->direccion,
-              //                        "lng"=>$sucursal->longitud,
-              //                        "lat"=>$sucursal->latitud
             ];
           }
         }
         $productos = null;
         if (!is_null($offer->productos['productos'])) {
           //            return ['id' => $offer];
-
           foreach ($offer->productos['productos'] as $dp) {
             $producto = Producto::find()->where(['id_producto' => $dp])->one();
             //              return $producto;
@@ -538,7 +581,8 @@ class BeneficioController extends Controller
           "companie" => [
             "id_empresa" => $offer->empresa->id_empresa,
             "razon_social" => $offer->empresa->razon_social,
-            "logo" => $offer->empresa->logo
+            "logo" => $offer->empresa->logo,
+            "rubro" => $offer->empresa->rubro
           ],
           "branch_offices" => $sucursales ?? null,
           "products" => $productos,
